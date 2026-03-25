@@ -19,9 +19,8 @@ services:
     networks:
       - llmops-network
     command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,12 +33,8 @@ services:
     ports:
       - "8001:8000"
     environment:
-      # API Keys for the different models
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      # MLflow configuration for native tracing
       - MLFLOW_TRACKING_URI=http://mlflow:5000
     volumes:
       - ./litellm/litellm-config.yaml:/app/config.yaml
@@ -48,14 +43,13 @@ services:
       - llmops-network
     depends_on:
       - mlflow
-    # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # MLflow for prompt tracing
+  # MLflow for prompt tracing  ← bien indenté sous "services"
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     ports:
@@ -64,14 +58,33 @@ services:
       - ./mlflow-data:/mlflow-data
     networks:
       - llmops-network
+    environment:
+      - MLFLOW_SERVER_HOST=0.0.0.0
+      - MLFLOW_SERVER_ALLOWED_HOSTS=mlflow,localhost,127.0.0.1,*
     command: >
-      mlflow server 
-      --host 0.0.0.0 
-      --port 5000 
-      --backend-store-uri sqlite:///mlflow-data/mlflow.db 
-      --default-artifact-root file:///mlflow-data/mlartifacts 
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow-data/mlflow.db
+      --default-artifact-root file:///mlflow-data/mlartifacts
       --serve-artifacts
+      --allowed-hosts "mlflow,localhost,127.0.0.1,*"
+
+  # Portainer - UI de monitoring
+  portainer:
+    image: portainer/portainer-ce:latest
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - llmops-network
+    restart: unless-stopped    
 
 networks:
   llmops-network:
     driver: bridge
+
+volumes:
+  portainer-data:
